@@ -38,11 +38,11 @@ const AI_PROVIDERS = {
     name: "OpenRouter",
     free: true,
     models: [
-      { value: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B (Free) — Recommended" },
+      { value: "openrouter/free", label: "Auto (Best Available Free)" },
+      { value: "nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 120B (Free)" },
+      { value: "minimax/minimax-m2.5:free", label: "MiniMax M2.5 (Free)" },
+      { value: "stepfun/step-3.5-flash:free", label: "Step 3.5 Flash (Free)" },
       { value: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B (Free)" },
-      { value: "mistralai/mistral-small-3.1-24b-instruct:free", label: "Mistral Small 3.1 (Free)" },
-      { value: "google/gemma-3-27b-it:free", label: "Gemma 3 27B (Free)" },
-      { value: "deepseek/deepseek-r1:free", label: "DeepSeek R1 (Free)" },
     ],
     placeholder: "sk-or-...",
     hint: "Free signup at openrouter.ai — no credit card needed. Free models included."
@@ -194,9 +194,10 @@ if (provider === "anthropic") {
     body: JSON.stringify({ model: resolvedModel, max_tokens: 8000, system: systemPrompt, messages: [{ role: "user", content: userMessage }] })
   });
 } else if (provider === "openrouter") {
+  // Only Authorization + Content-Type to avoid CORS preflight failures on mobile browsers
   res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}`, "HTTP-Referer": "https://tupci-sketch.github.io/Toast/", "X-Title": "No. 10 — PM Simulator" },
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
     body: JSON.stringify({ model: resolvedModel, max_tokens: 8000, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }] })
   });
 } else if (provider === "openai") {
@@ -339,7 +340,7 @@ export default function App() {
 const [screen, setScreen] = useState("loading"); // loading, title, settings, setup, cabinet, dashboard, results, pmqs, flagship, challenge, election, gameover, legacy, memoir
 const [apiKey, setApiKey] = useState("");
 const [aiProvider, setAiProvider] = useState("openrouter");
-const [aiModel, setAiModel] = useState("meta-llama/llama-3.3-70b-instruct:free");
+const [aiModel, setAiModel] = useState("openrouter/free");
 const [gameState, setGameState] = useState(null);
 const [loading, setLoading] = useState(false);
 const [loadingMsg, setLoadingMsg] = useState("");
