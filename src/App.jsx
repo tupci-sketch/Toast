@@ -397,9 +397,18 @@ useEffect(() => {
 const key = await storageGet("api-key");
 if (key) setApiKey(key);
 const prov = await storageGet("ai-provider");
+const resolvedProv = (prov && AI_PROVIDERS[prov]) ? prov : "openrouter";
 if (prov && AI_PROVIDERS[prov]) setAiProvider(prov);
 const mod = await storageGet("ai-model");
-if (mod) setAiModel(mod);
+const validModels = AI_PROVIDERS[resolvedProv]?.models?.map(m => m.value) || [];
+if (mod && validModels.includes(mod)) {
+  setAiModel(mod);
+} else {
+  // Stored model is invalid/outdated — reset to provider default
+  const defaultMod = AI_PROVIDERS[resolvedProv]?.models[0]?.value || "meta-llama/llama-3.3-70b-instruct:free";
+  setAiModel(defaultMod);
+  await storageSet("ai-model", defaultMod);
+}
 const save = await storageGet("current-game");
 setHasSave(!!save);
 const lb = await storageGet("legacy-history");
@@ -452,7 +461,12 @@ try {
 const result = await callAPI(apiKey, systemPrompt, userMsg, 2, aiProvider, aiModel);
 return result;
 } catch (e) {
-setError(e.message || String(e));
+const msg = e.message || String(e);
+// Friendly hint for CORS/network errors on mobile
+const display = (msg === "Load failed" || msg === "Failed to fetch" || msg === "NetworkError when attempting to fetch resource")
+  ? `Network error — check your connection. If problem persists, try a different model in Settings. (${msg})`
+  : msg;
+setError(display);
 return null;
 } finally {
 setLoading(false);
