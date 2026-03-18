@@ -187,33 +187,42 @@ let lastError = null;
 for (let attempt = 0; attempt <= maxRetries; attempt++) {
 try {
 let res;
+const controller = new AbortController();
+const timeout = setTimeout(() => controller.abort(), 90000); // 90s timeout
+try {
 if (provider === "anthropic") {
   res = await fetch("https://api.anthropic.com/v1/messages", {
+    signal: controller.signal,
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
     body: JSON.stringify({ model: resolvedModel, max_tokens: 8000, system: systemPrompt, messages: [{ role: "user", content: userMessage }] })
   });
 } else if (provider === "openrouter") {
-  // Only Authorization + Content-Type to avoid CORS preflight failures on mobile browsers
   res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    signal: controller.signal,
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-    body: JSON.stringify({ model: resolvedModel, max_tokens: 8000, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }] })
+    body: JSON.stringify({ model: resolvedModel, max_tokens: 4000, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }] })
   });
 } else if (provider === "openai") {
   res = await fetch("https://api.openai.com/v1/chat/completions", {
+    signal: controller.signal,
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
     body: JSON.stringify({ model: resolvedModel, max_tokens: 8000, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }] })
   });
 } else if (provider === "perplexity") {
   res = await fetch("https://api.perplexity.ai/chat/completions", {
+    signal: controller.signal,
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
     body: JSON.stringify({ model: resolvedModel, max_tokens: 8000, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }] })
   });
 } else {
   throw new Error(`Unknown provider: ${provider}`);
+}
+} finally {
+  clearTimeout(timeout);
 }
 if (!res.ok) {
 const errBody = await res.text();
@@ -236,7 +245,7 @@ const jsonEnd = Math.max(stripped.lastIndexOf("}"), stripped.lastIndexOf("]"));
 if (jsonStart === -1 || jsonEnd === -1) throw new Error(`No JSON found in response: ${stripped.slice(0, 200)}`);
 return JSON.parse(stripped.slice(jsonStart, jsonEnd + 1));
 } catch (e) {
-lastError = e;
+lastError = e.name === "AbortError" ? new Error("Request timed out after 90s. Try a faster model in Settings.") : e;
 if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000));
 }
 }
