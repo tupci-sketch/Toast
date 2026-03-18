@@ -34,8 +34,21 @@ cardBorder: "#2A3A4E", muted: "#8899AA"
 // AI PROVIDERS
 // ═══════════════════════════════════════════════════════════════
 const AI_PROVIDERS = {
+  openrouter: {
+    name: "OpenRouter",
+    free: true,
+    models: [
+      { value: "openrouter/free", label: "Auto (Best Free Model)" },
+      { value: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B (Free)" },
+      { value: "mistralai/mistral-small-3.1-24b-instruct:free", label: "Mistral Small 3.1 (Free)" },
+      { value: "google/gemma-3-27b-it:free", label: "Gemma 3 27B (Free)" },
+      { value: "deepseek/deepseek-r1:free", label: "DeepSeek R1 (Free)" },
+    ],
+    placeholder: "sk-or-...",
+    hint: "Free signup at openrouter.ai — no credit card needed. Free models included."
+  },
   anthropic: {
-    name: "Anthropic (Claude)",
+    name: "Anthropic",
     models: [
       { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4 (Recommended)" },
       { value: "claude-opus-4-20250514", label: "Claude Opus 4" },
@@ -45,12 +58,11 @@ const AI_PROVIDERS = {
     hint: "Get a key at console.anthropic.com"
   },
   openai: {
-    name: "OpenAI (GPT)",
+    name: "OpenAI",
     models: [
       { value: "gpt-4o", label: "GPT-4o (Recommended)" },
       { value: "gpt-4o-mini", label: "GPT-4o Mini (Fast)" },
       { value: "o3-mini", label: "o3-mini" },
-      { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
     ],
     placeholder: "sk-...",
     hint: "Get a key at platform.openai.com"
@@ -180,6 +192,12 @@ if (provider === "anthropic") {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
     body: JSON.stringify({ model: resolvedModel, max_tokens: 8000, system: systemPrompt, messages: [{ role: "user", content: userMessage }] })
+  });
+} else if (provider === "openrouter") {
+  res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}`, "HTTP-Referer": "https://tupci-sketch.github.io/Toast/", "X-Title": "No. 10 — PM Simulator" },
+    body: JSON.stringify({ model: resolvedModel, max_tokens: 8000, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }] })
   });
 } else if (provider === "openai") {
   res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -313,8 +331,8 @@ export default function App() {
 // Core state
 const [screen, setScreen] = useState("loading"); // loading, title, settings, setup, cabinet, dashboard, results, pmqs, flagship, challenge, election, gameover, legacy, memoir
 const [apiKey, setApiKey] = useState("");
-const [aiProvider, setAiProvider] = useState("anthropic");
-const [aiModel, setAiModel] = useState("claude-sonnet-4-20250514");
+const [aiProvider, setAiProvider] = useState("openrouter");
+const [aiModel, setAiModel] = useState("openrouter/free");
 const [gameState, setGameState] = useState(null);
 const [loading, setLoading] = useState(false);
 const [loadingMsg, setLoadingMsg] = useState("");
@@ -937,25 +955,39 @@ style={{ color: COLORS.muted }}>
 // ── SETTINGS ──
 const [tempKey, setTempKey] = useState("");
 const renderSettings = () => {
-const providerInfo = AI_PROVIDERS[aiProvider] || AI_PROVIDERS.anthropic;
+const providerInfo = AI_PROVIDERS[aiProvider] || AI_PROVIDERS.openrouter;
 return (
 <div className="min-h-screen px-6 py-8" style={{ background: COLORS.bg }}>
 <div className="max-w-md mx-auto">
 <button onClick={() => setScreen(gameState ? "dashboard" : "title")} className="mb-6 text-sm flex items-center gap-1" style={{ color: COLORS.gold }}>← Back</button>
 <h2 className="text-2xl font-bold mb-6" style={{ color: COLORS.gold, fontFamily: "'Playfair Display', serif" }}>Settings</h2>
+
 <Card>
-  <label className="block text-sm font-semibold mb-2" style={{ color: COLORS.cream }}>AI Provider</label>
+  <p className="text-xs mb-3 font-semibold uppercase tracking-widest" style={{ color: COLORS.gold }}>AI Provider</p>
+
+  {/* OpenRouter — free, prominently shown */}
+  <button onClick={() => saveAiProvider("openrouter")}
+    className="w-full text-left rounded-xl px-4 py-3 mb-2 transition-all"
+    style={{ background: aiProvider === "openrouter" ? `${COLORS.gold}22` : COLORS.cardBorder, border: `2px solid ${aiProvider === "openrouter" ? COLORS.gold : "transparent"}` }}>
+    <div className="flex items-center justify-between">
+      <span className="text-sm font-bold" style={{ color: COLORS.cream }}>OpenRouter</span>
+      <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: COLORS.green, color: "#000" }}>FREE</span>
+    </div>
+    <p className="text-xs mt-0.5" style={{ color: COLORS.muted }}>No credit card · 5 free models · Sign up at openrouter.ai</p>
+  </button>
+
+  {/* Other providers in a compact grid */}
   <div className="grid grid-cols-3 gap-2 mb-4">
-    {Object.entries(AI_PROVIDERS).map(([key, info]) => (
+    {Object.entries(AI_PROVIDERS).filter(([k]) => k !== "openrouter").map(([key, info]) => (
       <button key={key} onClick={() => saveAiProvider(key)}
         className="py-2 px-2 rounded-lg text-xs font-semibold transition-all"
-        style={{ background: aiProvider === key ? COLORS.gold : COLORS.cardBorder, color: aiProvider === key ? COLORS.bg : COLORS.cream, border: `1px solid ${aiProvider === key ? COLORS.gold : COLORS.cardBorder}` }}>
+        style={{ background: aiProvider === key ? COLORS.gold : COLORS.cardBorder, color: aiProvider === key ? COLORS.bg : COLORS.muted, border: `1px solid ${aiProvider === key ? COLORS.gold : "transparent"}` }}>
         {info.name}
       </button>
     ))}
   </div>
 
-  <label className="block text-sm font-semibold mb-2" style={{ color: COLORS.cream }}>Model</label>
+  <label className="block text-xs font-semibold mb-1 uppercase tracking-widest" style={{ color: COLORS.gold }}>Model</label>
   <select value={aiModel} onChange={e => saveAiModel(e.target.value)}
     className="w-full rounded-lg px-3 py-2.5 text-sm mb-4 focus:outline-none"
     style={{ background: COLORS.cardBorder, color: COLORS.cream }}>
@@ -964,13 +996,13 @@ return (
     ))}
   </select>
 
-  <label className="block text-sm font-semibold mb-2" style={{ color: COLORS.cream }}>API Key</label>
+  <label className="block text-xs font-semibold mb-1 uppercase tracking-widest" style={{ color: COLORS.gold }}>API Key</label>
   <input type="password" value={tempKey || apiKey} onChange={e => setTempKey(e.target.value)}
     placeholder={providerInfo.placeholder}
-    className="w-full rounded-lg px-3 py-2.5 text-sm mb-3 focus:outline-none focus:ring-2"
+    className="w-full rounded-lg px-3 py-2.5 text-sm mb-3 focus:outline-none"
     style={{ background: COLORS.cardBorder, color: COLORS.cream }} />
   <GoldButton small onClick={() => { saveApiKey(tempKey || apiKey); setTempKey(""); setScreen(gameState ? "dashboard" : "title"); }}>Save</GoldButton>
-  <p className="text-xs mt-3" style={{ color: COLORS.muted }}>Your key is stored locally only. {providerInfo.hint}</p>
+  <p className="text-xs mt-3 leading-relaxed" style={{ color: COLORS.muted }}>{providerInfo.hint}</p>
 </Card>
 </div>
 </div>
