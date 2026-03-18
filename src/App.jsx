@@ -30,6 +30,43 @@ green: "#22C55E", red: "#EF4444", amber: "#F59E0B", navy: "#0D2137",
 cardBorder: "#2A3A4E", muted: "#8899AA"
 };
 
+// ═══════════════════════════════════════════════════════════════
+// AI PROVIDERS
+// ═══════════════════════════════════════════════════════════════
+const AI_PROVIDERS = {
+  anthropic: {
+    name: "Anthropic (Claude)",
+    models: [
+      { value: "claude-sonnet-4-20250514", label: "Claude Sonnet 4 (Recommended)" },
+      { value: "claude-opus-4-20250514", label: "Claude Opus 4" },
+      { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 (Fast)" },
+    ],
+    placeholder: "sk-ant-...",
+    hint: "Get a key at console.anthropic.com"
+  },
+  openai: {
+    name: "OpenAI (GPT)",
+    models: [
+      { value: "gpt-4o", label: "GPT-4o (Recommended)" },
+      { value: "gpt-4o-mini", label: "GPT-4o Mini (Fast)" },
+      { value: "o3-mini", label: "o3-mini" },
+      { value: "gpt-4-turbo", label: "GPT-4 Turbo" },
+    ],
+    placeholder: "sk-...",
+    hint: "Get a key at platform.openai.com"
+  },
+  perplexity: {
+    name: "Perplexity",
+    models: [
+      { value: "sonar-pro", label: "Sonar Pro (Recommended)" },
+      { value: "sonar", label: "Sonar" },
+      { value: "sonar-reasoning", label: "Sonar Reasoning" },
+    ],
+    placeholder: "pplx-...",
+    hint: "Get a key at perplexity.ai/settings/api"
+  }
+};
+
 const LOADING_MESSAGES = [
 "The PM is considering the options...",
 "Cabinet is being briefed...",
@@ -132,21 +169,44 @@ GAME BALANCE RULES:
 // ═══════════════════════════════════════════════════════════════
 // API CALL HELPER
 // ═══════════════════════════════════════════════════════════════
-async function callAPI(apiKey, systemPrompt, userMessage, maxRetries = 2) {
+async function callAPI(apiKey, systemPrompt, userMessage, maxRetries = 2, provider = "anthropic", model = null) {
+const resolvedModel = model || AI_PROVIDERS[provider]?.models[0]?.value || "claude-sonnet-4-20250514";
 let lastError = null;
 for (let attempt = 0; attempt <= maxRetries; attempt++) {
 try {
-const res = await fetch("https://api.anthropic.com/v1/messages", {
-method: "POST",
-headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
-body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 8000, system: systemPrompt, messages: [{ role: "user", content: userMessage }] })
-});
+let res;
+if (provider === "anthropic") {
+  res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+    body: JSON.stringify({ model: resolvedModel, max_tokens: 8000, system: systemPrompt, messages: [{ role: "user", content: userMessage }] })
+  });
+} else if (provider === "openai") {
+  res = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: resolvedModel, max_tokens: 8000, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }] })
+  });
+} else if (provider === "perplexity") {
+  res = await fetch("https://api.perplexity.ai/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: resolvedModel, max_tokens: 8000, messages: [{ role: "system", content: systemPrompt }, { role: "user", content: userMessage }] })
+  });
+} else {
+  throw new Error(`Unknown provider: ${provider}`);
+}
 if (!res.ok) {
 const errBody = await res.text();
 throw new Error(`API ${res.status}: ${errBody.slice(0, 300)}`);
 }
 const data = await res.json();
-const text = data.content.map(c => c.text || "").join("");
+let text;
+if (provider === "anthropic") {
+  text = data.content.map(c => c.text || "").join("");
+} else {
+  text = data.choices?.[0]?.message?.content || "";
+}
 const clean = text.replace(/`json\s*/g, "").replace(/`\s*/g, "").trim();
 return JSON.parse(clean);
 } catch (e) {
@@ -253,6 +313,8 @@ export default function App() {
 // Core state
 const [screen, setScreen] = useState("loading"); // loading, title, settings, setup, cabinet, dashboard, results, pmqs, flagship, challenge, election, gameover, legacy, memoir
 const [apiKey, setApiKey] = useState("");
+const [aiProvider, setAiProvider] = useState("anthropic");
+const [aiModel, setAiModel] = useState("claude-sonnet-4-20250514");
 const [gameState, setGameState] = useState(null);
 const [loading, setLoading] = useState(false);
 const [loadingMsg, setLoadingMsg] = useState("");
@@ -309,6 +371,10 @@ useEffect(() => {
 (async () => {
 const key = await storageGet("api-key");
 if (key) setApiKey(key);
+const prov = await storageGet("ai-provider");
+if (prov && AI_PROVIDERS[prov]) setAiProvider(prov);
+const mod = await storageGet("ai-model");
+if (mod) setAiModel(mod);
 const save = await storageGet("current-game");
 setHasSave(!!save);
 const lb = await storageGet("legacy-history");
@@ -358,7 +424,7 @@ if (!apiKey) { setError("No API key set. Go to Settings."); return null; }
 setLoading(true);
 setError(null);
 try {
-const result = await callAPI(apiKey, systemPrompt, userMsg);
+const result = await callAPI(apiKey, systemPrompt, userMsg, 2, aiProvider, aiModel);
 return result;
 } catch (e) {
 setError(e.message || String(e));
@@ -366,7 +432,7 @@ return null;
 } finally {
 setLoading(false);
 }
-}, [apiKey]);
+}, [apiKey, aiProvider, aiModel]);
 
 // ─── Begin Career ───
 const beginCareer = useCallback(async () => {
@@ -814,10 +880,20 @@ setScreen("dashboard");
 }
 }, []);
 
-// ─── Save API key ───
+// ─── Save API settings ───
 const saveApiKey = useCallback(async (key) => {
 setApiKey(key);
 await storageSet("api-key", key);
+}, []);
+const saveAiProvider = useCallback(async (prov) => {
+setAiProvider(prov);
+await storageSet("ai-provider", prov);
+const defaultModel = AI_PROVIDERS[prov]?.models[0]?.value;
+if (defaultModel) { setAiModel(defaultModel); await storageSet("ai-model", defaultModel); }
+}, []);
+const saveAiModel = useCallback(async (mod) => {
+setAiModel(mod);
+await storageSet("ai-model", mod);
 }, []);
 
 // ═══════════════════════════════════════════════════════════════
@@ -860,22 +936,46 @@ style={{ color: COLORS.muted }}>
 
 // ── SETTINGS ──
 const [tempKey, setTempKey] = useState("");
-const renderSettings = () => (
+const renderSettings = () => {
+const providerInfo = AI_PROVIDERS[aiProvider] || AI_PROVIDERS.anthropic;
+return (
 <div className="min-h-screen px-6 py-8" style={{ background: COLORS.bg }}>
 <div className="max-w-md mx-auto">
 <button onClick={() => setScreen(gameState ? "dashboard" : "title")} className="mb-6 text-sm flex items-center gap-1" style={{ color: COLORS.gold }}>← Back</button>
 <h2 className="text-2xl font-bold mb-6" style={{ color: COLORS.gold, fontFamily: "'Playfair Display', serif" }}>Settings</h2>
 <Card>
-<label className="block text-sm font-semibold mb-2" style={{ color: COLORS.cream }}>Anthropic API Key</label>
-<input type="password" value={tempKey || apiKey} onChange={e => setTempKey(e.target.value)} placeholder="sk-ant-..."
-className="w-full rounded-lg px-3 py-2.5 text-sm mb-3 focus:outline-none focus:ring-2"
-style={{ background: COLORS.cardBorder, color: COLORS.cream, focusRingColor: COLORS.gold }} />
-<GoldButton small onClick={() => { saveApiKey(tempKey || apiKey); setTempKey(""); setScreen(gameState ? "dashboard" : "title"); }}>Save Key</GoldButton>
-<p className="text-xs mt-3" style={{ color: COLORS.muted }}>Your key is stored locally and only sent to the Anthropic API. Get one at console.anthropic.com</p>
+  <label className="block text-sm font-semibold mb-2" style={{ color: COLORS.cream }}>AI Provider</label>
+  <div className="grid grid-cols-3 gap-2 mb-4">
+    {Object.entries(AI_PROVIDERS).map(([key, info]) => (
+      <button key={key} onClick={() => saveAiProvider(key)}
+        className="py-2 px-2 rounded-lg text-xs font-semibold transition-all"
+        style={{ background: aiProvider === key ? COLORS.gold : COLORS.cardBorder, color: aiProvider === key ? COLORS.bg : COLORS.cream, border: `1px solid ${aiProvider === key ? COLORS.gold : COLORS.cardBorder}` }}>
+        {info.name}
+      </button>
+    ))}
+  </div>
+
+  <label className="block text-sm font-semibold mb-2" style={{ color: COLORS.cream }}>Model</label>
+  <select value={aiModel} onChange={e => saveAiModel(e.target.value)}
+    className="w-full rounded-lg px-3 py-2.5 text-sm mb-4 focus:outline-none"
+    style={{ background: COLORS.cardBorder, color: COLORS.cream }}>
+    {providerInfo.models.map(m => (
+      <option key={m.value} value={m.value}>{m.label}</option>
+    ))}
+  </select>
+
+  <label className="block text-sm font-semibold mb-2" style={{ color: COLORS.cream }}>API Key</label>
+  <input type="password" value={tempKey || apiKey} onChange={e => setTempKey(e.target.value)}
+    placeholder={providerInfo.placeholder}
+    className="w-full rounded-lg px-3 py-2.5 text-sm mb-3 focus:outline-none focus:ring-2"
+    style={{ background: COLORS.cardBorder, color: COLORS.cream }} />
+  <GoldButton small onClick={() => { saveApiKey(tempKey || apiKey); setTempKey(""); setScreen(gameState ? "dashboard" : "title"); }}>Save</GoldButton>
+  <p className="text-xs mt-3" style={{ color: COLORS.muted }}>Your key is stored locally only. {providerInfo.hint}</p>
 </Card>
 </div>
 </div>
 );
+};
 
 // ── SETUP ──
 const renderSetup = () => (
