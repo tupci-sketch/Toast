@@ -45,16 +45,16 @@ const LOADING_MESSAGES = [
 // STORAGE HELPERS
 // ═══════════════════════════════════════════════════════════════
 async function storageGet(key) {
-try {
-const r = await window.storage.get(key);
-return r ? r.value : null;
-} catch { return null; }
+  try {
+    const val = localStorage.getItem(key);
+    return val;
+  } catch { return null; }
 }
 async function storageSet(key, value) {
-try {
-await window.storage.set(key, typeof value === "string" ? value : JSON.stringify(value));
-return true;
-} catch { return false; }
+  try {
+    localStorage.setItem(key, typeof value === "string" ? value : JSON.stringify(value));
+    return true;
+  } catch { return false; }
 }
 
 // ═══════════════════════════════════════════════════════════════
