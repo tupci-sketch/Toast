@@ -38,7 +38,7 @@ const AI_PROVIDERS = {
     name: "OpenRouter",
     free: true,
     models: [
-      { value: "openrouter/free", label: "Auto (Best Free Model)" },
+      { value: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B (Free) — Recommended" },
       { value: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B (Free)" },
       { value: "mistralai/mistral-small-3.1-24b-instruct:free", label: "Mistral Small 3.1 (Free)" },
       { value: "google/gemma-3-27b-it:free", label: "Gemma 3 27B (Free)" },
@@ -219,14 +219,21 @@ const errBody = await res.text();
 throw new Error(`API ${res.status}: ${errBody.slice(0, 300)}`);
 }
 const data = await res.json();
+// Check for API-level error returned in a 200 body (some providers do this)
+if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
 let text;
 if (provider === "anthropic") {
   text = data.content.map(c => c.text || "").join("");
 } else {
-  text = data.choices?.[0]?.message?.content || "";
+  text = data.choices?.[0]?.message?.content;
+  if (typeof text !== "string") throw new Error(`Unexpected response format from ${provider}: ${JSON.stringify(data).slice(0, 200)}`);
 }
-const clean = text.replace(/`json\s*/g, "").replace(/`\s*/g, "").trim();
-return JSON.parse(clean);
+// Strip markdown fences and find the JSON object/array
+const stripped = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
+const jsonStart = stripped.indexOf("{") !== -1 ? stripped.indexOf("{") : stripped.indexOf("[");
+const jsonEnd = Math.max(stripped.lastIndexOf("}"), stripped.lastIndexOf("]"));
+if (jsonStart === -1 || jsonEnd === -1) throw new Error(`No JSON found in response: ${stripped.slice(0, 200)}`);
+return JSON.parse(stripped.slice(jsonStart, jsonEnd + 1));
 } catch (e) {
 lastError = e;
 if (attempt < maxRetries) await new Promise(r => setTimeout(r, 2000));
@@ -332,7 +339,7 @@ export default function App() {
 const [screen, setScreen] = useState("loading"); // loading, title, settings, setup, cabinet, dashboard, results, pmqs, flagship, challenge, election, gameover, legacy, memoir
 const [apiKey, setApiKey] = useState("");
 const [aiProvider, setAiProvider] = useState("openrouter");
-const [aiModel, setAiModel] = useState("openrouter/free");
+const [aiModel, setAiModel] = useState("meta-llama/llama-3.3-70b-instruct:free");
 const [gameState, setGameState] = useState(null);
 const [loading, setLoading] = useState(false);
 const [loadingMsg, setLoadingMsg] = useState("");
